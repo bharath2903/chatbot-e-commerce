@@ -1,10 +1,14 @@
+import os
+
 import pandas as pd
 from pathlib import Path
 import chromadb
 from chromadb.utils import embedding_functions
 from groq import Groq
+from dotenv import load_dotenv
 
-
+load_dotenv()
+groq_client = Groq()
 chroma_client = chromadb.Client()
 collection_name_faq = 'faqs'
 faq_path = Path(__file__).parent / 'resources/faq_data.csv'
@@ -40,9 +44,40 @@ def get_relavent_qa(query):
     )
     return result
 
+def faq_chain(result):
+    context = " ".join([r.get('answer') for r in result['metadatas'][0]])
+    return context
+def generate_answer(query, context):
+    prompt = f''' 
+    Given the question and context below, come up with a 
+    natural easy to understand response for a customer who has an issue using only the context mentioned. If you dont find the 
+    answer based on the below context , tell" I am not sure ,our team will contact you soon for assistance". Please do not 
+    make things up
+    Question: {query}
+    
+    Context: {context}
+    '''
+    chat_completion = groq_client.chat.completions.create(
+
+        messages=[
+            {
+                "role": "user",
+                "content":prompt,
+    }
+    ],
+    model = os.environ['GROQ_MODEL'],
+    )
+    return chat_completion.choices[0].message.content
+
+
+
+
 
 
 if __name__ =='__main__':
     ingest_faq(faq_path)
-    query='how do i return an item?'
-    print(get_relavent_qa(query))
+    query='Do i always need to do online payments , or can i use cash also??'
+    result = get_relavent_qa(query)
+    context = faq_chain(result)
+    answer = generate_answer(query,context)
+    print(answer)
